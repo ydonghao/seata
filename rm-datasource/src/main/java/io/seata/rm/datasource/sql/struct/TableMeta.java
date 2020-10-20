@@ -25,6 +25,7 @@ import java.util.Objects;
 
 import io.seata.common.exception.NotSupportYetException;
 import io.seata.common.util.CollectionUtils;
+import io.seata.rm.datasource.ColumnUtils;
 
 /**
  * The type Table meta.
@@ -34,8 +35,15 @@ import io.seata.common.util.CollectionUtils;
 public class TableMeta {
     private String tableName;
 
-    private Map<String, ColumnMeta> allColumns = new LinkedHashMap<String, ColumnMeta>();
-    private Map<String, IndexMeta> allIndexes = new LinkedHashMap<String, IndexMeta>();
+    /**
+     * key: column name
+     */
+
+    private Map<String, ColumnMeta> allColumns = new LinkedHashMap<>();
+    /**
+     * key: index name
+     */
+    private Map<String, IndexMeta> allIndexes = new LinkedHashMap<>();
 
     /**
      * Gets table name.
@@ -62,15 +70,7 @@ public class TableMeta {
      * @return the column meta
      */
     public ColumnMeta getColumnMeta(String colName) {
-        ColumnMeta col = allColumns.get(colName);
-        if (col == null) {
-            if (colName.charAt(0) == '`') {
-                col = allColumns.get(colName.substring(1, colName.length() - 1));
-            } else {
-                col = allColumns.get("`" + colName + "`");
-            }
-        }
-        return col;
+        return allColumns.get(colName);
     }
 
     /**
@@ -113,19 +113,15 @@ public class TableMeta {
      * @return the primary key map
      */
     public Map<String, ColumnMeta> getPrimaryKeyMap() {
-        Map<String, ColumnMeta> pk = new HashMap<String, ColumnMeta>();
-        for (Entry<String, IndexMeta> entry : allIndexes.entrySet()) {
-            IndexMeta index = entry.getValue();
+        Map<String, ColumnMeta> pk = new HashMap<>();
+        allIndexes.forEach((key, index) -> {
             if (index.getIndextype().value() == IndexType.PRIMARY.value()) {
                 for (ColumnMeta col : index.getValues()) {
                     pk.put(col.getColumnName(), col);
                 }
             }
-        }
+        });
 
-        if (pk.size() > 1) {
-            throw new NotSupportYetException(String.format("%s contains multi PK, but current not support.", tableName));
-        }
         if (pk.size() < 1) {
             throw new NotSupportYetException(String.format("%s needs to contain the primary key.", tableName));
         }
@@ -148,12 +144,12 @@ public class TableMeta {
     }
 
     /**
-     * Gets pk name.
-     *
-     * @return the pk name
+     * Gets add escape pk name.
+     * @param dbType
+     * @return
      */
-    public String getPkName() {
-        return getPrimaryKeyOnlyName().get(0);
+    public List<String> getEscapePkNameList(String dbType) {
+        return ColumnUtils.addEscape(getPrimaryKeyOnlyName(), dbType);
     }
 
     /**
@@ -172,6 +168,8 @@ public class TableMeta {
             return false;
         }
 
+
+        //at least contain one pk
         if (cols.containsAll(pk)) {
             return true;
         } else {

@@ -22,6 +22,7 @@ import java.util.Date;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
+import io.seata.common.util.CollectionUtils;
 import io.seata.common.util.StringUtils;
 import io.seata.saga.engine.repo.StateMachineRepository;
 import io.seata.saga.engine.sequence.SeqGenerator;
@@ -52,16 +53,8 @@ public class StateMachineRepositoryImpl implements StateMachineRepository {
 
     @Override
     public StateMachine getStateMachineById(String stateMachineId) {
-
-        Item item = stateMachineMapById.get(stateMachineId);
-        if (item == null) {
-            Item newItem = new Item();
-            item = stateMachineMapById.putIfAbsent(stateMachineId, newItem);
-            if (item == null) {
-                item = newItem;
-            }
-
-        }
+        Item item = CollectionUtils.computeIfAbsent(stateMachineMapById, stateMachineId,
+            key -> new Item());
         if (item.getValue() == null && stateLangStore != null) {
             synchronized (item) {
                 if (item.getValue() == null && stateLangStore != null) {
@@ -71,16 +64,15 @@ public class StateMachineRepositoryImpl implements StateMachineRepository {
                             stateMachine.getContent());
                         if (parsedStatMachine == null) {
                             throw new RuntimeException(
-                                "Parse State Language failed, stateMachineId：" + stateMachine.getId() + ", name:"
+                                "Parse State Language failed, stateMachineId:" + stateMachine.getId() + ", name:"
                                     + stateMachine.getName());
                         }
                         stateMachine.setStartState(parsedStatMachine.getStartState());
                         stateMachine.getStates().putAll(parsedStatMachine.getStates());
                         item.setValue(stateMachine);
-                        stateMachineMapByNameAndTenant.put(stateMachine.getName() + "_" + stateMachine.getTenantId(),
+                        stateMachineMapById.put(stateMachine.getName() + "_" + stateMachine.getTenantId(),
                             item);
                     }
-
                 }
             }
         }
@@ -89,14 +81,8 @@ public class StateMachineRepositoryImpl implements StateMachineRepository {
 
     @Override
     public StateMachine getStateMachine(String stateMachineName, String tenantId) {
-        Item item = stateMachineMapByNameAndTenant.get(stateMachineName + "_" + tenantId);
-        if (item == null) {
-            Item newItem = new Item();
-            item = stateMachineMapByNameAndTenant.putIfAbsent(stateMachineName + "_" + tenantId, newItem);
-            if (item == null) {
-                item = newItem;
-            }
-        }
+        Item item = CollectionUtils.computeIfAbsent(stateMachineMapByNameAndTenant, stateMachineName + "_" + tenantId,
+            key -> new Item());
         if (item.getValue() == null && stateLangStore != null) {
             synchronized (item) {
                 if (item.getValue() == null && stateLangStore != null) {
@@ -106,7 +92,7 @@ public class StateMachineRepositoryImpl implements StateMachineRepository {
                             stateMachine.getContent());
                         if (parsedStatMachine == null) {
                             throw new RuntimeException(
-                                "Parse State Language failed, stateMachineId：" + stateMachine.getId() + ", name:"
+                                "Parse State Language failed, stateMachineId:" + stateMachine.getId() + ", name:"
                                     + stateMachine.getName());
                         }
                         stateMachine.setStartState(parsedStatMachine.getStartState());
@@ -158,7 +144,9 @@ public class StateMachineRepositoryImpl implements StateMachineRepository {
                     return stateMachine;
                 }
             }
-            stateMachine.setId(seqGenerator.generate(DomainConstants.SEQ_ENTITY_STATE_MACHINE));
+            if (StringUtils.isBlank(stateMachine.getId())) {
+                stateMachine.setId(seqGenerator.generate(DomainConstants.SEQ_ENTITY_STATE_MACHINE));
+            }
             stateMachine.setGmtCreate(new Date());
             stateLangStore.storeStateMachine(stateMachine);
         }
@@ -185,8 +173,9 @@ public class StateMachineRepositoryImpl implements StateMachineRepository {
                         stateMachine.setTenantId(tenantId);
                     }
                     registryStateMachine(stateMachine);
-
-                    LOGGER.info("===== StateMachine Loaded: \n{}", json);
+                    if (LOGGER.isDebugEnabled()) {
+                        LOGGER.debug("===== StateMachine Loaded: \n{}", json);
+                    }
                 }
             }
         }

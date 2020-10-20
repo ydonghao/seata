@@ -15,20 +15,23 @@
  */
 package io.seata.spring.annotation.datasource;
 
-import io.seata.rm.datasource.DataSourceProxy;
-
 import javax.sql.DataSource;
 import java.util.concurrent.ConcurrentHashMap;
+
+import io.seata.common.util.CollectionUtils;
+import io.seata.core.model.BranchType;
+import io.seata.rm.datasource.DataSourceProxy;
+import io.seata.rm.datasource.SeataDataSourceProxy;
+import io.seata.rm.datasource.xa.DataSourceProxyXA;
 
 /**
  * the type data source proxy holder
  *
  * @author xingfudeshi@gmail.com
- * @date 2019/08/23
  */
 public class DataSourceProxyHolder {
     private static final int MAP_INITIAL_CAPACITY = 8;
-    private ConcurrentHashMap<DataSource, DataSourceProxy> dataSourceProxyMap;
+    private ConcurrentHashMap<DataSource, SeataDataSourceProxy> dataSourceProxyMap;
 
     private DataSourceProxyHolder() {
         dataSourceProxyMap = new ConcurrentHashMap<>(MAP_INITIAL_CAPACITY);
@@ -38,12 +41,11 @@ public class DataSourceProxyHolder {
      * the type holder
      */
     private static class Holder {
-        private static DataSourceProxyHolder INSTANCE;
+        private static final DataSourceProxyHolder INSTANCE;
 
         static {
             INSTANCE = new DataSourceProxyHolder();
         }
-
     }
 
     /**
@@ -58,21 +60,26 @@ public class DataSourceProxyHolder {
     /**
      * Put dataSource
      *
-     * @param dataSource
+     * @param dataSource          the data source
+     * @param dataSourceProxyMode the data source proxy mode
      * @return dataSourceProxy
      */
-    public DataSourceProxy putDataSource(DataSource dataSource) {
-        return this.dataSourceProxyMap.computeIfAbsent(dataSource, DataSourceProxy::new);
-    }
+    public SeataDataSourceProxy putDataSource(DataSource dataSource, BranchType dataSourceProxyMode) {
+        DataSource originalDataSource;
+        if (dataSource instanceof SeataDataSourceProxy) {
+            SeataDataSourceProxy dataSourceProxy = (SeataDataSourceProxy) dataSource;
 
-    /**
-     * Get dataSourceProxy
-     *
-     * @param dataSource
-     * @return dataSourceProxy
-     */
-    public DataSourceProxy getDataSourceProxy(DataSource dataSource) {
-        return this.dataSourceProxyMap.get(dataSource);
-    }
+            //If it's an right proxy, return it directly.
+            if (dataSourceProxyMode == dataSourceProxy.getBranchType()) {
+                return (SeataDataSourceProxy)dataSource;
+            }
 
+            //Get the original data source.
+            originalDataSource = dataSourceProxy.getTargetDataSource();
+        } else {
+            originalDataSource = dataSource;
+        }
+        return CollectionUtils.computeIfAbsent(this.dataSourceProxyMap, originalDataSource,
+                BranchType.XA == dataSourceProxyMode ? DataSourceProxyXA::new : DataSourceProxy::new);
+    }
 }

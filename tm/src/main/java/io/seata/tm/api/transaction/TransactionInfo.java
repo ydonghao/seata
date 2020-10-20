@@ -22,17 +22,20 @@ import java.util.Set;
 
 /**
  * @author guoyao
- * @date 2019/4/17
  */
 public final class TransactionInfo implements Serializable {
-
-    public static final int DEFAULT_TIME_OUT = 60000;
 
     private int timeOut;
 
     private String name;
 
     private Set<RollbackRule> rollbackRules;
+
+    private Propagation propagation;
+
+    private int lockRetryInternal;
+
+    private int lockRetryTimes;
 
     public int getTimeOut() {
         return timeOut;
@@ -74,6 +77,34 @@ public final class TransactionInfo implements Serializable {
             }
         }
 
-        return winner == null || !(winner instanceof NoRollbackRule);
+        return !(winner instanceof NoRollbackRule);
+    }
+
+    public Propagation getPropagation() {
+        if (this.propagation != null) {
+            return this.propagation;
+        }
+        //default propagation
+        return Propagation.REQUIRED;
+    }
+
+    public void setPropagation(Propagation propagation) {
+        this.propagation = propagation;
+    }
+
+    public int getLockRetryInternal() {
+        return lockRetryInternal;
+    }
+
+    public void setLockRetryInternal(int lockRetryInternal) {
+        this.lockRetryInternal = lockRetryInternal;
+    }
+
+    public int getLockRetryTimes() {
+        return lockRetryTimes;
+    }
+
+    public void setLockRetryTimes(int lockRetryTimes) {
+        this.lockRetryTimes = lockRetryTimes;
     }
 }
